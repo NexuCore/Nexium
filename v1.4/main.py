@@ -1,12 +1,12 @@
-import os
 import sys
-from PyQt5.QtCore import QUrl, Qt
+from PyQt5.QtCore import QUrl, Qt, QSize
 from PyQt5.QtGui import QIcon, QKeySequence, QPixmap
 from PyQt5.QtWidgets import (QApplication, QLineEdit, QVBoxLayout, QWidget,
                              QTabWidget, QToolBar, QMainWindow, QAction,
                              QMenuBar, QShortcut, QSizePolicy, QLabel, 
                              QHBoxLayout, QFrame, QToolButton)
 from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtNetwork import QNetworkAccessManager, QNetworkRequest
 
 
 class BrowserTab(QWidget):
@@ -39,17 +39,40 @@ class SynaxBrowser(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Nexium Browser")
-        icon_path = os.path.join(os.path.dirname(__file__), "nexium_icon.png")
-        if os.path.exists(icon_path):
-            self.setWindowIcon(QIcon(icon_path))
-        else:
-            # Fallback to theme icon if custom icon not found
-            self.setWindowIcon(QIcon.fromTheme("internet-web-browser"))
+        
+        # Initialize network manager for downloading logo
+        self.network_manager = QNetworkAccessManager()
+        self.network_manager.finished.connect(self.logo_downloaded)
+        
+        # Start downloading the logo
+        self.logo_url = "https://nexucore.github.io/Nexium/nexium_icon.png"
+        self.network_manager.get(QNetworkRequest(QUrl(self.logo_url)))
         
         self.setGeometry(100, 100, 1200, 800)
         
         self.init_ui()
         self.add_new_tab(home=True)
+
+    def logo_downloaded(self, reply):
+        """Handle downloaded logo"""
+        if reply.error():
+            print("Failed to download logo:", reply.errorString())
+            return
+            
+        data = reply.readAll()
+        pixmap = QPixmap()
+        pixmap.loadFromData(data)
+        
+        # Create icon from pixmap
+        icon = QIcon(pixmap)
+        self.setWindowIcon(icon)
+        
+        # Store the pixmap for toolbar use
+        self.logo_pixmap = pixmap.scaled(32, 32, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        
+        # Update toolbar if it exists
+        if hasattr(self, 'toolbar_logo'):
+            self.toolbar_logo.setPixmap(self.logo_pixmap)
 
     def init_ui(self):
         """Initialize all UI components"""
@@ -123,6 +146,23 @@ class SynaxBrowser(QMainWindow):
         url_layout = QHBoxLayout(url_container)
         url_layout.setContentsMargins(10, 5, 10, 5)
         
+        # Add logo to toolbar
+        logo_label = QLabel()
+        logo_label.setAlignment(Qt.AlignCenter)
+        logo_label.setFixedWidth(40)
+        
+        # Use downloaded pixmap if available, otherwise use placeholder
+        if hasattr(self, 'logo_pixmap'):
+            logo_label.setPixmap(self.logo_pixmap)
+        else:
+            # Temporary placeholder
+            placeholder = QPixmap(32, 32)
+            placeholder.fill(Qt.transparent)
+            logo_label.setPixmap(placeholder)
+        
+        self.toolbar_logo = logo_label
+        url_layout.addWidget(logo_label)
+        
         # URL bar
         self.url_bar = QLineEdit()
         self.url_bar.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -165,7 +205,7 @@ class SynaxBrowser(QMainWindow):
             btn = QToolButton()
             btn.setDefaultAction(action)
             btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-            btn.setIconSize(QApplication.primaryScreen().availableGeometry().size() / 50)
+            btn.setIconSize(QSize(24, 24))
             btn.setStyleSheet("""
                 QToolButton {
                     padding: 5px 10px;
@@ -378,7 +418,6 @@ class SynaxBrowser(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
-    app.setWindowIcon(QIcon("nexium_logo.png"))
     window = SynaxBrowser()
     window.show()
     sys.exit(app.exec_())
